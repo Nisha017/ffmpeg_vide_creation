@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:ffmpeg_demo/created_vdo.dart';
+import 'package:ffmpeg_kit_flutter_full_gpl/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_full_gpl/return_code.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_ffmpeg/flutter_ffmpeg.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -355,15 +356,13 @@ class _UploadLongEventMediaScreenState
 
     File(imagesListFile).writeAsStringSync(imagesPath);
 
-    // FFmpeg command to create video from images with specific durations
     String command = '-y -f concat -safe 0 -i $imagesListFile '
         '-vf "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,format=yuv420p" '
-        '-r 30 -c:v mpeg4 -qscale:v 2 -pix_fmt yuv420p $outputVideoPath';
+        '-r 30 -c:v libx264 -qscale:v 2 -pix_fmt yuv420p $outputVideoPath';
 
-    FlutterFFmpeg a = FlutterFFmpeg();
-    final session = await a.execute(command);
-    // var returnCode = await session.getReturnCode();
-    if (session == 0) {
+    final session = await FFmpegKit.execute(command);
+    var returnCode = await session.getReturnCode();
+    if (ReturnCode.isSuccess(returnCode)) {
       print('Video created successfully from images!');
       await combineVideos(
           outputVideoPath, _mainVideo!.path, _socialMsgVdo!.path);
@@ -373,7 +372,8 @@ class _UploadLongEventMediaScreenState
       //     print("FFmpeg Log: ${log.getMessage()}");
       //   }
       // });
-      _showSnackbar(context, "Error while merging your images!");
+
+      _showSnackbar(context, "Error while merging images");
     }
   }
 
@@ -388,44 +388,19 @@ class _UploadLongEventMediaScreenState
     if (await finalOutputFile.exists()) {
       await finalOutputFile.delete();
     }
-
-    // String command =
-    //     '-y -i $videoPath1 -i $videoPath2 -i ${_musicFile!.path} -i $videoPath3 '
-    //     '-filter_complex "[0:v]scale=720:1280,setsar=1[video1]; '
-    //     '[1:v]scale=720:1280,setsar=1[video2]; '
-    //     '[3:v]scale=720:1280,setsar=1[video3]; '
-    //     '[video1][video2]concat=n=2:v=1:a=0[concatv]; '
-    //     '[concatv][video3]concat=n=2:v=1:a=0[outv]" '
-    //     '-map "[outv]" -map 2:a -c:a aac -b:a 192k -c:v libx264 -pix_fmt yuv420p -shortest $outputFinalVideoPath';
-
     String command =
-        '-y -i "$videoPath1" -i "$videoPath2" -i "$selectedMusicUrl" -i "$videoPath3" ' +
-            '-filter_complex "[0:v]scale=720:1280,setsar=1[video1]; ' +
-            '[1:v]scale=720:1280,setsar=1[video2]; ' +
-            '[3:v]scale=720:1280,setsar=1[video3]; ' +
+        '-y -i $videoPath1 -i $videoPath2 -i $selectedMusicUrl -i $videoPath3 ' +
+            '-filter_complex "[0:v]scale=480:854,setsar=1[video1]; ' +
+            '[1:v]scale=480:854,setsar=1[video2]; ' +
+            '[3:v]scale=480:854,setsar=1[video3]; ' +
             '[video1][video2]concat=n=2:v=1:a=0[concatv]; ' +
-            '[concatv][video3]concat=n=2:v=1:a=0[outv]; ' +
-            '[2:a]volume=1.5[audio]" ' +
-            '-map "[outv]" -map "[audio]" -c:a aac -b:a 192k -c:v mpeg4 -time_base 1/30 -pix_fmt yuv420p ' +
-            '-t 30 -shortest "$outputFinalVideoPath"';
+            '[concatv][video3]concat=n=2:v=1:a=0[outv]; [2:a]volume=1.5[audio]" ' +
+            '-map "[outv]" -map "[audio]" -c:a aac -b:a 128k -c:v libx264 -b:v 1000k -preset ultrafast -r 15 -shortest $outputFinalVideoPath';
 
-    // final FlutterFFmpegConfig _ffmpegConfig = FlutterFFmpegConfig();
-    FlutterFFmpeg ffmpeg = FlutterFFmpeg();
-    final session = await ffmpeg.execute(command);
-    //     _ffmpegConfig.enableStatisticsCallback((statistics) {
-    //   if (statistics != null) {
-    //     // Current processing time in seconds
-    //     double currentTime = statistics.time / 1000.0;  // Convert from milliseconds to seconds
-    //     double percentageDone = (currentTime / totalDuration) * 100;
-
-    //     // Print or update UI with percentage done
-    //     print('Video completion: ${percentageDone.toStringAsFixed(2)}%');
-
-    //     // You can also update a progress bar or UI element with the percentage
-    //   }
-    // });
+    final session = await FFmpegKit.execute(command);
+    var returnCode = await session.getReturnCode();
     // print("returnCode = ${returnCode!.getValue()}");
-    if (session == 0) {
+    if (ReturnCode.isSuccess(returnCode)) {
       print('Final video created successfully with the third video added!');
 
       Navigator.push(context, CupertinoPageRoute(builder: (context) {
